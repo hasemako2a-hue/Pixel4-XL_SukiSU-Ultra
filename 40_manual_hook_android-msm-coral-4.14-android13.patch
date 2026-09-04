@@ -1,0 +1,109 @@
+diff --git a/fs/exec.c b/fs/exec.c
+--- a/fs/exec.c
++++ b/fs/exec.c
+@@ -1706,6 +1706,10 @@
+ /*
+  * sys_execve() executes a new program.
+  */
++#ifdef CONFIG_KSU
++extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr,
++			void *argv, void *envp, int *flags);
++#endif
+ static int do_execveat_common(int fd, struct filename *filename,
+ 			      struct user_arg_ptr argv,
+ 			      struct user_arg_ptr envp,
+@@ -1720,6 +1724,10 @@
+ 	if (IS_ERR(filename))
+ 		return PTR_ERR(filename);
+ 
++#ifdef CONFIG_KSU
++	ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
++#endif		
++
+ 	/*
+ 	 * We move the actual failure in case of RLIMIT_NPROC excess from
+ 	 * set*uid() to execve() because too many poorly written programs
+
+
+diff --git a/fs/open.c b/fs/open.c
+--- a/fs/open.c
++++ b/fs/open.c
+@@ -359,6 +359,10 @@
+  * We do this by temporarily clearing all FS-related capabilities and
+  * switching the fsuid/fsgid around to the real ones.
+  */
++#ifdef CONFIG_KSU
++	extern int ksu_handle_faccessat(int *dfd, const char __user **filename_user,
++                                int *mode, int *flags);
++#endif
+ SYSCALL_DEFINE3(faccessat, int, dfd, const char __user *, filename, int, mode)
+ {
+ 	const struct cred *old_cred;
+@@ -368,6 +372,9 @@
+ 	struct vfsmount *mnt;
+ 	int res;
+ 	unsigned int lookup_flags = LOOKUP_FOLLOW;
++#ifdef CONFIG_KSU
++	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
++#endif
+ 
+ 	if (mode & ~S_IRWXO)	/* where's F_OK, X_OK, W_OK, R_OK? */
+ 		return -EINVAL;
+
+
+diff --git a/fs/read_write.c b/fs/read_write.c
+--- a/fs/read_write.c
++++ b/fs/read_write.c
+@@ -428,10 +428,16 @@
+ 	return result;
+ }
+ EXPORT_SYMBOL(kernel_read);
+-
++#ifdef CONFIG_KSU
++extern int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
++                               size_t *count_ptr, loff_t **pos);
++#endif
+ ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
+ {
+ 	ssize_t ret;
++#ifdef CONFIG_KSU
++    ksu_handle_vfs_read(&file, &buf, &count, &pos);
++#endif	
+ 
+ 	if (!(file->f_mode & FMODE_READ))
+ 		return -EBADF;
+
+
+diff --git a/fs/stat.c b/fs/stat.c
+--- a/fs/stat.c
++++ b/fs/stat.c
+@@ -354,13 +354,18 @@
+ 	return cp_new_stat(&stat, statbuf);
+ }
+ 
++#ifdef CONFIG_KSU
++extern int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);
++#endif
+ #if !defined(__ARCH_WANT_STAT64) || defined(__ARCH_WANT_SYS_NEWFSTATAT)
+ SYSCALL_DEFINE4(newfstatat, int, dfd, const char __user *, filename,
+ 		struct stat __user *, statbuf, int, flag)
+ {
+ 	struct kstat stat;
+ 	int error;
+-
++#ifdef CONFIG_KSU
++    ksu_handle_stat(&dfd, &filename, &flag);
++#endif
+ 	error = vfs_fstatat(dfd, filename, &stat, flag);
+ 	if (error)
+ 		return error;
+@@ -642,6 +647,9 @@
+ {
+ 	struct kstat stat;
+ 	int error;
++#ifdef CONFIG_KSU
++        ksu_handle_stat(&dfd, &filename, &flag);
++#endif	
+ 
+ 	error = vfs_fstatat(dfd, filename, &stat, flag);
+ 	if (error)
